@@ -1,0 +1,7 @@
+new guess = ask "Guess the number";
+new answer = 3;
+
+loop guess != answer {
+if guess < answer { guess = ask "its more than that"; };
+if guess > answer { guess = ask "its less than that"; };
+}

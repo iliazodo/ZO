@@ -1,0 +1,266 @@
+// DOM refrences
+const runBtn = document.getElementById("run");
+const stopBtn = document.getElementById("stop");
+const display = document.getElementById("display");
+const codeText = document.getElementById("textEditor");
+
+// ZO variables
+let outputs = "";
+let storage = {};
+
+// Program setting
+window.onload = function () {
+  runBtn.addEventListener("click", readCode);
+  stopBtn.addEventListener("click", removeOutput);
+};
+
+function readCode() {
+  outputs = "";
+  let code = codeText.value;
+  let statements = smartSplit(code);
+  statements.forEach((s) => interpret(s));
+}
+
+function interpret(statement) {
+  if (statement.trim() == "") {
+    return;
+  }
+
+  // Separating tokens(args)
+  const tokens = statement.match(/"[^"]*"|\S+/g);
+  const cmd = tokens[0];
+  const args = tokens.slice(1);
+
+  // Processing
+  if (cmd === "say") {
+    // Output
+    if (isArithmeticEX(args)) {
+      try {
+        const value = eval(openVariables(args).join(" "));
+        outputs += value;
+      } catch (error) {
+        outputs = error;
+      }
+    } else if (args[0][0] === '"' && args[0][args[0].length - 1] === '"') {
+      outputs += args[0].slice(1, args[0].length - 1).replace(/\\n/g, "\n");
+    } else if (args[0] in storage) {
+      outputs += storage[args[0]];
+    } else if (!isNaN(Number(args[0]))) {
+      outputs += args[0];
+    } else {
+      outputs = "ReferenceError: Unknown " + args.join(" ");
+    }
+  } else if (cmd === "new") {
+    // Creating new variable
+    if (args[1] === "=") {
+      if (isArithmeticEX(args)) {
+        try {
+          const value = eval(openVariables(args).slice(2).join(" "));
+          storage[args[0]] = value;
+        } catch (error) {
+          outputs = error;
+        }
+      } else if (args[2][0] === '"' && args[2][args[2].length - 1] === '"') {
+        storage[args[0]] = args[2]
+          .slice(1, args[2].length - 1)
+          .replace(/\\n/g, "\n");
+      } else if (
+        args[2] === "ask" &&
+        args[3][0] === '"' &&
+        args[3][args[3].length - 1] === '"'
+      ) {
+        storage[args[0]] = window.prompt(args[3].slice(1, args[3].length - 1));
+      } else {
+        storage[args[0]] = Number(args[2]);
+      }
+    } else {
+      outputs = "SyntaxError: Unknown " + args;
+    }
+  } else if (cmd === "ask") {
+    // Getting input
+    if (args[0][0] === '"' && args[0][args[0].length - 1] === '"') {
+      window.prompt(args[0].slice(1, args[0].length - 1));
+    } else {
+      outputs = "TypeError: " + args + "must be string";
+    }
+  } else if (args[0] === "=") {
+    // Changing variable value
+    if (cmd in storage) {
+      if (isArithmeticEX(args)) {
+        try {
+          const value = eval(openVariables(args).slice(1).join(" "));
+          storage[cmd] = value;
+        } catch (error) {
+          outputs = error;
+        }
+      } else if (args[1][0] === '"' && args[1][args[1].length - 1] === '"') {
+        storage[cmd] = args[1].slice(1, args[1].length - 1);
+      } else if (
+        args[1] === "ask" &&
+        args[2][0] === '"' &&
+        args[2][args[2].length - 1] === '"'
+      ) {
+        storage[cmd] = window.prompt(args[2].slice(1, args[2].length - 1));
+      } else {
+        storage[cmd] = Number(args[1]);
+      }
+    } else {
+      outputs = "ReferenceError: Unknown " + cmd;
+    }
+  } else if (cmd == "if") {
+    try {
+      let v1 =
+        args[0] in storage
+          ? storage[args[0]]
+          : args[0][0] === '"' && args[0][args[0].length - 1] === '"'
+          ? args[0].slice(1, args[0].length - 1)
+          : args[0];
+
+      let v2 =
+        args[2] in storage
+          ? storage[args[2]]
+          : args[2][0] === '"' && args[2][args[2].length - 1] === '"'
+          ? args[2].slice(1, args[2].length - 1)
+          : args[2];
+
+      if (args[1] == "==") {
+        if (v1 == v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else if (args[1] == "!=") {
+        if (v1 != v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else if (args[1] == ">") {
+        if (v1 > v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else if (args[1] == ">=") {
+        if (v1 >= v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else if (args[1] == "<") {
+        if (v1 < v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else if (args[1] == "<=") {
+        if (v1 <= v2) {
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      } else {
+        outputs = "syntax error: " + cmd + args[0] + args[1] + args[2];
+      }
+    } catch (error) {
+      outputs = error.message;
+    }
+  } else if (cmd == "loop") {
+    try {
+      let v1;
+      let v2;
+
+      function reload() {
+        v1 =
+          args[0] in storage
+            ? storage[args[0]]
+            : args[0][0] === '"' && args[0][args[0].length - 1] === '"'
+            ? args[0].slice(1, args[0].length - 1)
+            : args[0];
+
+        v2 =
+          args[2] in storage
+            ? storage[args[2]]
+            : args[2][0] === '"' && args[2][args[2].length - 1] === '"'
+            ? args[2].slice(1, args[2].length - 1)
+            : args[2];
+      }
+      reload();
+
+      if (args[1] == "==") {
+        while (v1 == v2) {
+          reload();
+          if(v1 != v2) break;
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      }
+      if (args[1] == "!=") {
+        while (v1 != v2) {
+          reload();
+          if(v1 == v2) break;
+          handleMultipleCmd(args.slice(3).join(" "));
+        }
+      }
+    } catch (error) {
+      outputs = error.message;
+    }
+  }
+
+  displayOutput();
+}
+
+// Detect arithmetic
+function isArithmeticEX(text) {
+  return (
+    text.includes("+") ||
+    text.includes("-") ||
+    text.includes("/") ||
+    text.includes("*") ||
+    text.includes("%")
+  );
+}
+
+function openVariables(args) {
+  args.forEach((arg, i) => {
+    if (storage[arg] !== undefined) {
+      args[i] = storage[arg];
+    }
+  });
+  return args;
+}
+
+function handleMultipleCmd(block) {
+  if (block[0] === "{" && block[block.length - 1] === "}") {
+    block = block.slice(1, block.length - 1); // Remove surrounding curly braces
+    console.log(block);
+    block.split(";").forEach((element) => {
+      if (element.trim()) {
+        interpret(element.trim()); // Process each statement inside the block
+      }
+    });
+  } else {
+    interpret(block); // Handle a single command if it's not a block
+  }
+}
+
+function smartSplit(code) {
+  let parts = [];
+  let current = "";
+  let depth = 0;
+
+  for (let i = 0; i < code.length; i++) {
+    const char = code[i];
+
+    if (char === "{") depth++;
+    if (char === "}") depth--;
+
+    if (char === ";" && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) parts.push(current.trim());
+
+  return parts;
+}
+
+// Output setting
+function displayOutput() {
+  display.value = outputs;
+  display.style.display = "block";
+}
+
+function removeOutput() {
+  display.style.display = "none";
+}
